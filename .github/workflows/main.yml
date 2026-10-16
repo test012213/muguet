@@ -1,0 +1,52 @@
+name: Build Muguet IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      game_zip_url:
+        description: 'Direct download URL for game.zip (Leave blank if game.zip is committed to the repo root)'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    name: Build iOS IPA
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Toolchain & Dependencies
+        run: |
+          # Install xcodegen via Homebrew
+          brew install xcodegen
+
+          # Install specified Rust toolchain & iOS target
+          rustup toolchain install 1.98.1
+          rustup target add aarch64-apple-ios --toolchain 1.98.1
+          rustup default 1.98.1
+
+      - name: Obtain game.zip
+        run: |
+          if [ -n "${{ github.event.inputs.game_zip_url }}" ]; then
+            echo "Downloading game.zip from URL..."
+            curl -L "${{ github.event.inputs.game_zip_url }}" -o game.zip
+          elif [ -f "game.zip" ]; then
+            echo "game.zip found in repository root."
+          else
+            echo "::error::game.zip is missing! Either commit game.zip to the repo or provide a URL in workflow parameters."
+            exit 1
+          fi
+
+      - name: Build IPA using make-ios.sh
+        run: |
+          chmod +x make-ios.sh
+          # Build unsigned/free IPA without signing identities
+          FREE=1 BUNDLE_ID="com.muguet.app" ./make-ios.sh game.zip --ipa
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Muguet-IPA
+          path: build/Muguet.ipa
